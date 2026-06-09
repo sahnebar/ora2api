@@ -689,8 +689,6 @@ def main():
             else:
                 if not json_mode:
                     print("[-] Anmeldung und Refresh fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.")
-                else:
-                    print(json.dumps({"error": "Token expired, refresh/re-login failed."}))
                 return
 
         if response.status_code != 200:
