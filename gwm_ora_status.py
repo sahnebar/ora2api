@@ -387,37 +387,70 @@ def get_verification_code_via_imap(imap_config):
         mail.login(user, password)
         mail.select("inbox")
         
-        # Search for unread emails from GWM or containing GWM
-        status, messages = mail.search(None, '(UNSEEN FROM "gwm.cn")')
+        # Search for GWM emails (both read and unread, to handle auto-read by other devices)
+        status, messages = mail.search(None, '(SUBJECT "GWM")')
         if not messages[0]:
-            status, messages = mail.search(None, '(UNSEEN SUBJECT "GWM")')
+            status, messages = mail.search(None, '(FROM "gwm.cn")')
             
         if messages[0]:
             mail_ids = messages[0].split()
-            # Grab latest email ID
-            latest_id = mail_ids[-1]
-            status, data = mail.fetch(latest_id, '(RFC822)')
-            
-            for response_part in data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    body = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                break
-                    else:
-                        body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+            # Loop from newest to oldest
+            for latest_id in reversed(mail_ids):
+                status, data = mail.fetch(latest_id, '(RFC822)')
+                
+                for response_part in data:
+                    if isinstance(response_part, tuple):
+                        msg = email.message_from_bytes(response_part[1])
                         
-                    # Find 4-digit verification code
-                    match = re.search(r'\b(\d{4})\b', body)
-                    if match:
-                        code = match.group(1)
-                        # Mark email as read
-                        mail.store(latest_id, '+FLAGS', '\\Seen')
-                        mail.logout()
-                        return code
+                        # Check Date header to ensure we only look at recent emails (within last 10 minutes)
+                        msg_date_str = msg.get("Date")
+                        if msg_date_str:
+                            try:
+                                import datetime
+                                from email.utils import parsedate_to_datetime
+                                msg_date = parsedate_to_datetime(msg_date_str)
+                                now = datetime.datetime.now(datetime.timezone.utc)
+                                diff = now - msg_date
+                                # If the email is older than 10 minutes, skip it to prevent using outdated codes
+                                if abs(diff.total_seconds()) > 600:
+                                    continue
+                            except Exception:
+                                pass
+                        
+                        body = ""
+                        if msg.is_multipart():
+                            for part in msg.walk():
+                                if part.get_content_type() == "text/plain":
+                                    body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                                    break
+                            if not body:
+                                # Fallback to HTML body
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/html":
+                                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                                        break
+                        else:
+                            body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            
+                        # If body is still empty, convert the whole message to string as last resort
+                        if not body:
+                            try:
+                                body = msg.as_string()
+                            except Exception:
+                                pass
+                                
+                        # Find 4-digit verification code with context keywords to avoid matching years (like 2026)
+                        match = re.search(r'(?:code|verification|bestätigung|bestaetigung|verifizierung|safety)[^\d]{0,50}\b(\d{4})\b', body, re.IGNORECASE)
+                        if not match:
+                            # Fallback: look for any 4-digit number
+                            match = re.search(r'\b(\d{4})\b', body)
+                            
+                        if match:
+                            code = match.group(1)
+                            # Mark email as read
+                            mail.store(latest_id, '+FLAGS', '\\Seen')
+                            mail.logout()
+                            return code
         mail.logout()
     except Exception:
         pass
