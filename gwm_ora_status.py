@@ -423,6 +423,172 @@ def get_verification_code_via_imap(imap_config):
         pass
     return None
 
+def perform_fresh_login(config, json_mode):
+    if not config:
+        # Prompt for credentials interactively (only if not json_mode)
+        if json_mode:
+            print(json.dumps({"error": "No config file found. Please run interactively first."}))
+            return None
+        
+        default_user = "dein_email@domain.com"
+        username = input(f"Benutzername/Email [{default_user}]: ").strip()
+        if not username:
+            username = default_user
+            
+        password = input("Passwort: ").strip()
+        if not password:
+            print("Fehler: Passwort darf nicht leer sein.")
+            return None
+
+        default_country = "DE"
+        country = input(f"Landescode (z.B. DE, GB, AT, CH) [{default_country}]: ").strip().upper()
+        if not country:
+            country = default_country
+
+        device_id = uuid.uuid4().hex
+        config = {
+            "country": country,
+            "username": username,
+            "password": password,
+            "deviceId": device_id,
+            "accessToken": "",
+            "refreshToken": ""
+        }
+        save_config(config)
+    else:
+        username = config.get("username")
+        password = config.get("password")
+        country = config.get("country", "DE")
+        device_id = config.get("deviceId")
+        if not device_id:
+            device_id = uuid.uuid4().hex
+            config["deviceId"] = device_id
+            save_config(config)
+
+    headers_h5 = {
+        "rs": "2",
+        "terminal": "GW_APP_ORA",
+        "brand": "3",
+        "language": "de",
+        "systemType": "1",
+        "cver": "",
+        "country": country
+    }
+
+    login_body = {
+        "account": username,
+        "agreement": [1, 2, 23],
+        "appType": 0,
+        "country": country,
+        "deviceId": device_id,
+        "isEncrypt": False,
+        "model": "ora2mqtt",
+        "pushToken": "",
+        "type": 1,
+        "password": password
+    }
+    
+    if not json_mode:
+        print("\n[+] Versuche Anmeldung am GWM H5-Gateway...")
+    login_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/loginAccount"
+    
+    try:
+        response = requests.post(login_url, json=login_body, headers=headers_h5)
+        if response.status_code != 200:
+            if not json_mode:
+                print(f"[-] HTTP Fehler bei der Anmeldung: {response.status_code}")
+            return None
+            
+        resp_data = response.json()
+        code = resp_data.get("code")
+        desc = resp_data.get("description", "")
+        
+        # Untrusted device flow
+        if code == "110641":
+            if not json_mode:
+                print("\n[!] Neues Gerät erkannt. Fordere Verifizierungscode an...")
+            sms_code_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/getSMSCode"
+            sms_code_body = {
+                "email": username,
+                "scenario": 0,
+                "type": 3
+            }
+            sms_code_resp = requests.post(sms_code_url, json=sms_code_body, headers=headers_h5)
+            if sms_code_resp.status_code != 200:
+                if not json_mode:
+                    print("[-] Fehler bei Anforderung des Verifizierungscodes.")
+                return None
+                
+            sms_code = None
+            if config.get("imap"):
+                if not json_mode:
+                    print("[+] Lese Verifizierungscode automatisch aus E-Mail-Postfach...")
+                for attempt in range(3):
+                    sms_code = get_verification_code_via_imap(config["imap"])
+                    if sms_code:
+                        break
+                    if not json_mode:
+                        print(f"[+] Warte auf E-Mail (Versuch {attempt+1}/3)...")
+                    time.sleep(10)
+                    
+            if not sms_code:
+                if json_mode:
+                    print(json.dumps({"error": "Device untrusted and no IMAP config found for automation."}))
+                    return None
+                sms_code = input("Bitte den 4-stelligen Code aus der E-Mail eingeben: ").strip()
+                
+            if not sms_code:
+                if not json_mode:
+                    print("Fehler: Verifizierungscode darf nicht leer sein.")
+                return None
+                
+            sms_body = {
+                "agreement": [1, 2, 23],
+                "appType": 0,
+                "country": country,
+                "deviceId": device_id,
+                "email": username,
+                "model": "ora2mqtt",
+                "pushToken": "",
+                "smsCode": sms_code
+            }
+            sms_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/loginWithSMS"
+            response = requests.post(sms_url, json=sms_body, headers=headers_h5)
+            if response.status_code != 200:
+                if not json_mode:
+                    print(f"[-] HTTP Fehler bei der Verifizierung: {response.status_code}")
+                return None
+            resp_data = response.json()
+            code = resp_data.get("code")
+            desc = resp_data.get("description", "")
+            
+        if code != "000000":
+            if not json_mode:
+                print(f"[-] Anmeldung/Verifizierung fehlgeschlagen (Code {code}): {desc}")
+                if code == "308008":
+                    print("[!] HINWEIS: Dieses Konto ist wegen zu vieler Fehlversuche für 2 Stunden gesperrt.")
+            else:
+                print(json.dumps({"error": f"Login failed: {desc} (code {code})"}))
+            return None
+            
+        access_token = resp_data["data"]["accessToken"]
+        refresh_token_val = resp_data["data"]["refreshToken"]
+        if not json_mode:
+            print("[+] Anmeldung erfolgreich! Access-Token erhalten.")
+        
+        # Save configuration
+        config["accessToken"] = access_token
+        config["refreshToken"] = refresh_token_val
+        save_config(config)
+        return config
+        
+    except Exception as e:
+        if not json_mode:
+            print(f"[-] Verbindungsfehler: {e}")
+        else:
+            print(json.dumps({"error": str(e)}))
+        return None
+
 def main():
     json_mode = "--json" in sys.argv
     
@@ -454,60 +620,15 @@ def main():
     if config and config.get("accessToken"):
         if not json_mode:
             print("[+] Konfiguration geladen. Überprüfe bestehende Sitzung...")
-        country = config["country"]
-        username = config["username"]
-        device_id = config["deviceId"]
+        country = config.get("country", "DE")
         access_token = config["accessToken"]
     else:
-        # Check if config has credentials
-        if config and config.get("username") and config.get("password"):
-            if not json_mode:
-                print("[+] GWM-Zugangsdaten aus Konfigurationsdatei geladen.")
-            username = config["username"]
-            password = config["password"]
-            country = config.get("country", "DE")
-            device_id = config.get("deviceId")
-            if not device_id:
-                device_id_path = '/tmp/gwm_device_id.txt'
-                if os.path.exists(device_id_path):
-                    with open(device_id_path, 'r') as f:
-                        device_id = f.read().strip()
-                else:
-                    device_id = uuid.uuid4().hex
-                    with open(device_id_path, 'w') as f:
-                        f.write(device_id)
-            access_token = None
-        else:
-            # Obtain credentials
-            default_user = "dein_email@domain.com"
-            if json_mode:
-                # Under HA command sensor, we must have config file, we can't do input prompts
-                print(json.dumps({"error": "No config file found. Run script interactively once first."}))
-                return
-                
-            username = input(f"Benutzername/Email [{default_user}]: ").strip()
-            if not username:
-                username = default_user
-                
-            password = input("Passwort: ").strip()
-            if not password:
-                print("Fehler: Passwort darf nicht leer sein.")
-                return
-
-            default_country = "DE"
-            country = input(f"Landescode (z.B. DE, GB, AT, CH) [{default_country}]: ").strip().upper()
-            if not country:
-                country = default_country
-
-            device_id_path = '/tmp/gwm_device_id.txt'
-            if os.path.exists(device_id_path):
-                with open(device_id_path, 'r') as f:
-                    device_id = f.read().strip()
-            else:
-                device_id = uuid.uuid4().hex
-                with open(device_id_path, 'w') as f:
-                    f.write(device_id)
-            access_token = None
+        # Check if config has credentials or we need to login
+        config = perform_fresh_login(config, json_mode)
+        if not config:
+            return
+        country = config.get("country", "DE")
+        access_token = config["accessToken"]
 
     headers_h5 = {
         "rs": "2",
@@ -518,133 +639,6 @@ def main():
         "cver": "",
         "country": country
     }
-    
-    if not access_token:
-        # Perform fresh login
-        login_body = {
-            "account": username,
-            "agreement": [1, 2, 23],
-            "appType": 0,
-            "country": country,
-            "deviceId": device_id,
-            "isEncrypt": False,
-            "model": "ora2mqtt",
-            "pushToken": "",
-            "type": 1,
-            "password": password
-        }
-        
-        if not json_mode:
-            print("\n[+] Versuche Anmeldung am GWM H5-Gateway...")
-        login_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/loginAccount"
-        
-        try:
-            response = requests.post(login_url, json=login_body, headers=headers_h5)
-            if response.status_code != 200:
-                if not json_mode:
-                    print(f"[-] HTTP Fehler bei der Anmeldung: {response.status_code}")
-                return
-                
-            resp_data = response.json()
-            code = resp_data.get("code")
-            desc = resp_data.get("description", "")
-            
-            # Untrusted device flow
-            if code == "110641":
-                if not json_mode:
-                    print("\n[!] Neues Gerät erkannt. Fordere Verifizierungscode an...")
-                sms_code_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/getSMSCode"
-                sms_code_body = {
-                    "email": username,
-                    "scenario": 0,
-                    "type": 3
-                }
-                sms_code_resp = requests.post(sms_code_url, json=sms_code_body, headers=headers_h5)
-                if sms_code_resp.status_code != 200:
-                    if not json_mode:
-                        print("[-] Fehler bei Anforderung des Verifizierungscodes.")
-                    return
-                    
-                sms_code = None
-                # Check if IMAP is configured to extract it automatically
-                if config and config.get("imap"):
-                    if not json_mode:
-                        print("[+] Lese Verifizierungscode automatisch aus E-Mail-Postfach...")
-                    # Try a few times with delay
-                    for attempt in range(3):
-                        sms_code = get_verification_code_via_imap(config["imap"])
-                        if sms_code:
-                            break
-                        if not json_mode:
-                            print(f"[+] Warte auf E-Mail (Versuch {attempt+1}/3)...")
-                        time.sleep(10)
-                        
-                if not sms_code:
-                    if json_mode:
-                        print(json.dumps({"error": "Device untrusted and no IMAP config found for automation."}))
-                        return
-                    sms_code = input("Bitte den 4-stelligen Code aus der E-Mail eingeben: ").strip()
-                    
-                if not sms_code:
-                    if not json_mode:
-                        print("Fehler: Verifizierungscode darf nicht leer sein.")
-                    return
-                    
-                sms_body = {
-                    "agreement": [1, 2, 23],
-                    "appType": 0,
-                    "country": country,
-                    "deviceId": device_id,
-                    "email": username,
-                    "model": "ora2mqtt",
-                    "pushToken": "",
-                    "smsCode": sms_code
-                }
-                sms_url = "https://eu-h5-gateway.gwmcloud.com/app-api/api/v1.0/userAuth/loginWithSMS"
-                response = requests.post(sms_url, json=sms_body, headers=headers_h5)
-                if response.status_code != 200:
-                    if not json_mode:
-                        print(f"[-] HTTP Fehler bei der Verifizierung: {response.status_code}")
-                    return
-                resp_data = response.json()
-                code = resp_data.get("code")
-                desc = resp_data.get("description", "")
-                
-            if code != "000000":
-                if not json_mode:
-                    print(f"[-] Anmeldung/Verifizierung fehlgeschlagen (Code {code}): {desc}")
-                    if code == "308008":
-                        print("[!] HINWEIS: Dieses Konto ist wegen zu vieler Fehlversuche für 2 Stunden gesperrt.")
-                else:
-                    print(json.dumps({"error": f"Login failed: {desc} (code {code})"}))
-                return
-                
-            access_token = resp_data["data"]["accessToken"]
-            refresh_token_val = resp_data["data"]["refreshToken"]
-            if not json_mode:
-                print("[+] Anmeldung erfolgreich! Access-Token erhalten.")
-            
-            # Save configuration
-            config_to_save = {
-                "country": country,
-                "username": username,
-                "password": password,
-                "deviceId": device_id,
-                "accessToken": access_token,
-                "refreshToken": refresh_token_val
-            }
-            # Keep existing IMAP config if present
-            if config and config.get("imap"):
-                config_to_save["imap"] = config["imap"]
-            save_config(config_to_save)
-            config = config_to_save
-            
-        except Exception as e:
-            if not json_mode:
-                print(f"[-] Verbindungsfehler: {e}")
-            else:
-                print(json.dumps({"error": str(e)}))
-            return
 
     headers_app = {
         "rs": "2",
@@ -665,10 +659,24 @@ def main():
         )
         
         # If the token is invalid/expired (HTTP 401 or GWM token expired error)
-        if response.status_code == 401 or (response.status_code == 200 and response.json().get("code") in ["110701", "110702"]):
+        resp_json = response.json() if response.status_code == 200 else {}
+        resp_code = str(resp_json.get("code", ""))
+        resp_desc = str(resp_json.get("description", "")).lower()
+        if response.status_code == 401 or resp_code.startswith("1107") or resp_code == "550004" or "token" in resp_desc:
             if not json_mode:
                 print("[-] Access-Token abgelaufen oder ungültig.")
+            
+            refreshed = False
             if config and refresh_token(config, headers_h5):
+                refreshed = True
+            else:
+                if not json_mode:
+                    print("[+] Token-Refresh fehlgeschlagen. Versuche erneute Anmeldung...")
+                config = perform_fresh_login(config, json_mode)
+                if config:
+                    refreshed = True
+
+            if refreshed:
                 # Retry request with new token
                 access_token = config["accessToken"]
                 headers_app["accessToken"] = access_token
@@ -680,12 +688,9 @@ def main():
                 )
             else:
                 if not json_mode:
-                    print("[-] Token-Refresh fehlgeschlagen. Bitte führen Sie das Skript erneut aus, um sich anzumelden.")
+                    print("[-] Anmeldung und Refresh fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.")
                 else:
-                    print(json.dumps({"error": "Token expired and refresh failed."}))
-                # Clear invalid config
-                if os.path.exists(CONFIG_PATH):
-                    os.remove(CONFIG_PATH)
+                    print(json.dumps({"error": "Token expired, refresh/re-login failed."}))
                 return
 
         if response.status_code != 200:
