@@ -1,0 +1,13 @@
+{
+  "country": "DE",
+  "username": "YOUR_GWM_EMAIL@example.com",
+  "password": "YOUR_GWM_PASSWORD",
+  "deviceId": "3b6d697c75834a598495ced54640dfd9",
+  "accessToken": "",
+  "refreshToken": "",
+  "imap": {
+    "server": "imap.gmail.com",
+    "user": "YOUR_GMAIL_ADDRESS@gmail.com",
+    "password": "YOUR_GMAIL_APP_PASSWORD"
+  }
+}
