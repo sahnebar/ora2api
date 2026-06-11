@@ -132,45 +132,46 @@ Nachdem du die YAML-Dateien angepasst hast:
 
 ---
 
-## Unterstützte & Mögliche Datenpunkte (API-Telemetrie)
+## Unterstützte & Implementierte Datenpunkte (API-Telemetrie)
 
-Die GWM-API liefert für den ORA 03 eine Vielzahl von Telemetrie-Werten. Das Skript wertet standardmäßig die wichtigsten Datenpunkte aus, jedoch können alle unten aufgeführten Werte bei Bedarf leicht im Skript ergänzt werden.
+Die GWM-API liefert für den ORA 03 eine Vielzahl von Telemetrie-Werten. Das Skript wertet **alle unten aufgeführten Datenpunkte** automatisch aus und gibt sie im JSON-Format aus. 
 
-### Aktuell implementierte Datenpunkte:
-* **Batterieladestand (SOC)** (`2013021`) - Einheit: `%`
-* **Restreichweite** (`2011501`) - Einheit: `km`
-* **Kilometerstand (Odometer)** (`2103010`) - Einheit: `km`
-* **Ladekabel angeschlossen** (`2042082`) - Einheit: Binär (`0`/`1`)
-* **Ladevorgang aktiv** (`2041142`) - Einheit: Binär (`0`/`1`)
+Du kannst diese Attribute ganz einfach als Sensoren in Home Assistant anlegen, indem du sie aus den Attributen des Hauptsensors ausliest.
 
-### Weitere verfügbare Datenpunkte (nicht standardmäßig im JSON, aber möglich):
-Falls du weitere Sensoren benötigst, können diese durch einfache Anpassung des Python-Skripts und deiner Home Assistant Konfiguration hinzugefügt werden:
+### Übersicht aller ausgegebenen Attribute:
 
-| API-Code | Beschreibung | Einheit / Wertebereich |
-| :--- | :--- | :--- |
-| **2013022** | Verbleibende Ladedauer | Minuten |
-| **2041301** | Batteriezustand (SOCE) | `%` |
-| **2101001** | Reifendruck vorne links | `kPa` (z. B. `284` kPa = 2.84 bar) |
-| **2101002** | Reifendruck vorne rechts | `kPa` |
-| **2101003** | Reifendruck hinten links | `kPa` |
-| **2101004** | Reifendruck hinten rechts | `kPa` |
-| **2101005** | Reifentemperatur vorne links | `°C` |
-| **2101006** | Reifentemperatur vorne rechts | `°C` |
-| **2101007** | Reifentemperatur hinten links | `°C` |
-| **2101008** | Reifentemperatur hinten rechts | `°C` |
-| **2210001** | Fenster vorne links geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210002** | Fenster vorne rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210003** | Fenster hinten links geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210004** | Fenster hinten rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210010** | Tür vorne links geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210011** | Tür vorne rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210012** | Tür hinten links geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2210013** | Tür hinten rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2222001** | Kofferraum geöffnet? | `0` = Geschlossen / `1` = Offen |
-| **2310001** | Motorhaube geöffnet? | `0` = Offen / `1` = Geschlossen |
-| **2208001** | Türschloss (Zentralverriegelung) | `0` = Entriegelt / `1` = Verriegelt |
-| **2201001** | Innenraumtemperatur | `°C` (Wert kommt als Zehntelgrad, z. B. `230` für `23.0` °C) |
-| **2202001** | Klimaanlage aktiv (Vorklimatisierung) | `0` = Aus / `1` = An |
+| API-Code | JSON-Schlüssel | Beschreibung | Einheit / Wertebereich |
+| :--- | :--- | :--- | :--- |
+| **2013021** | `soc` | Batterieladestand (SOC) | `%` |
+| **2011501** | `range` | Restreichweite | `km` |
+| **2103010** | `odometer` | Kilometerstand (Odometer) | `km` |
+| **2042082** | `charging_plugged` | Ladekabel angeschlossen | `0` = Getrennt / `1` = Angeschlossen |
+| **2041142** | `charging_active` | Ladevorgang aktiv | `0` = Inaktiv / `1` = Aktiv |
+| **2013022** | `charging_duration_minutes` | Verbleibende Ladedauer | Minuten |
+| **2041301** | `soce` | Batteriezustand (SOCE) | `%` |
+| **2101001** | `tire_pressure_fl` | Reifendruck vorne links | `kPa` (z. B. `284.0` kPa = 2.84 bar) |
+| **2101002** | `tire_pressure_fr` | Reifendruck vorne rechts | `kPa` |
+| **2101003** | `tire_pressure_rl` | Reifendruck hinten links | `kPa` |
+| **2101004** | `tire_pressure_rr` | Reifendruck hinten rechts | `kPa` |
+| **2101005** | `tire_temperature_fl` | Reifentemperatur vorne links | `°C` |
+| **2101006** | `tire_temperature_fr` | Reifentemperatur vorne rechts | `°C` |
+| **2101007** | `tire_temperature_rl` | Reifentemperatur hinten links | `°C` |
+| **2101008** | `tire_temperature_rr` | Reifentemperatur hinten rechts | `°C` |
+| **2210001** | `window_fl_closed` | Fenster vorne links geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210002** | `window_fr_closed` | Fenster vorne rechts geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210003** | `window_rl_closed` | Fenster hinten links geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210004** | `window_rr_closed` | Fenster hinten rechts geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210005** | `sunroof_state` | Schiebedach-Status | Zustandscode |
+| **2210010** | `door_fl_closed` | Tür vorne links geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210011** | `door_fr_closed` | Tür vorne rechts geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210012** | `door_rl_closed` | Tür hinten links geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2210013** | `door_rr_closed` | Tür hinten rechts geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2222001** | `trunk_closed` | Kofferraum geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2310001** | `hood_closed` | Motorhaube geschlossen? | `0` = Offen / `1` = Geschlossen |
+| **2208001** | `locked` | Türschloss (Zentralverriegelung) | `0` = Entriegelt / `1` = Verriegelt |
+| **2201001** | `cabin_temperature` | Innenraumtemperatur | `°C` (automatisch umgerechnet in Grad Celsius) |
+| **2202001** | `climate_active` | Klimaanlage aktiv (Vorklimatisierung) | `0` = Aus / `1` = An |
+| **2220001 - 2220004** | `seat_heating_xx` | Sitzheizung-Zustände | `0` = Aus / `1` = Aktiv |
 
 ---
 

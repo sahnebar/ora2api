@@ -773,41 +773,57 @@ def main():
                 
             items = status_data.get("data", {}).get("items", [])
             
-            soc = None
-            range_val = None
-            odometer = None
-            charging_plugged = None
-            charging_active = None
+            # Map of GWM API codes to JSON key names and casting functions
+            code_mapping = {
+                "2013021": ("soc", int),
+                "2011501": ("range", int),
+                "2103010": ("odometer", int),
+                "2042082": ("charging_plugged", int),
+                "2041142": ("charging_active", int),
+                "2013022": ("charging_duration_minutes", int),
+                "2041301": ("soce", int),
+                "2101001": ("tire_pressure_fl", float),
+                "2101002": ("tire_pressure_fr", float),
+                "2101003": ("tire_pressure_rl", float),
+                "2101004": ("tire_pressure_rr", float),
+                "2101005": ("tire_temperature_fl", int),
+                "2101006": ("tire_temperature_fr", int),
+                "2101007": ("tire_temperature_rl", int),
+                "2101008": ("tire_temperature_rr", int),
+                "2210001": ("window_fl_closed", int),
+                "2210002": ("window_fr_closed", int),
+                "2210003": ("window_rl_closed", int),
+                "2210004": ("window_rr_closed", int),
+                "2210005": ("sunroof_state", int),
+                "2210010": ("door_fl_closed", int),
+                "2210011": ("door_fr_closed", int),
+                "2210012": ("door_rl_closed", int),
+                "2210013": ("door_rr_closed", int),
+                "2222001": ("trunk_closed", int),
+                "2310001": ("hood_closed", int),
+                "2208001": ("locked", int),
+                "2201001": ("cabin_temperature", lambda v: float(v) / 10.0 if v is not None else None),
+                "2202001": ("climate_active", int),
+                "2220001": ("seat_heating_fl", int),
+                "2220002": ("seat_heating_fr", int),
+                "2220003": ("seat_heating_rl", int),
+                "2220004": ("seat_heating_rr", int)
+            }
             
+            telemetry = {}
             for item in items:
                 code = item.get("code")
                 val = item.get("value")
-                if code == "2013021":
+                if code in code_mapping:
+                    key, cast_func = code_mapping[code]
                     try:
-                        soc = int(val)
+                        telemetry[key] = cast_func(val) if val is not None else None
                     except Exception:
-                        soc = val
-                elif code == "2011501":
-                    try:
-                        range_val = int(val)
-                    except Exception:
-                        range_val = val
-                elif code == "2103010":
-                    try:
-                        odometer = int(val)
-                    except Exception:
-                        odometer = val
-                elif code == "2042082":
-                    try:
-                        charging_plugged = int(val)
-                    except Exception:
-                        charging_plugged = val
-                elif code == "2041142":
-                    try:
-                        charging_active = int(val)
-                    except Exception:
-                        charging_active = val
-            
+                        telemetry[key] = val
+
+            # Calculate charging status string
+            charging_active = telemetry.get("charging_active")
+            charging_plugged = telemetry.get("charging_plugged")
             charging_status = "Unbekannt"
             if charging_active is not None:
                 if str(charging_active) == "1" or charging_active is True:
@@ -817,21 +833,20 @@ def main():
                         charging_status = "Angeschlossen (Inaktiv)"
                     else:
                         charging_status = "Getrennt"
-                        
+            telemetry["charging_status"] = charging_status
+
             if json_mode:
-                # Output clean JSON for Home Assistant command sensor
+                # Output clean JSON for Home Assistant command sensor with all data points
                 ha_output = {
                     "vin": vin,
                     "series_name": series_name,
-                    "soc": soc,
-                    "range": range_val,
-                    "odometer": odometer,
-                    "charging_status": charging_status,
-                    "charging_active": int(charging_active) if charging_active is not None else 0,
-                    "charging_plugged": int(charging_plugged) if charging_plugged is not None else 0
+                    **telemetry
                 }
                 print(json.dumps(ha_output, indent=2))
             else:
+                soc = telemetry.get("soc")
+                range_val = telemetry.get("range")
+                odometer = telemetry.get("odometer")
                 print(f"\n[+] Fahrzeug gefunden: {series_name} (VIN: {vin})")
                 print("\n================ ERGEBNISSE ================")
                 print(f"1. SOC (Ladestand):      {soc}%" if soc is not None else "1. SOC (Ladestand):      Nicht verfügbar")
