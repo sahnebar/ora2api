@@ -132,6 +132,48 @@ Nachdem du die YAML-Dateien angepasst hast:
 
 ---
 
+## Unterstützte & Mögliche Datenpunkte (API-Telemetrie)
+
+Die GWM-API liefert für den ORA 03 eine Vielzahl von Telemetrie-Werten. Das Skript wertet standardmäßig die wichtigsten Datenpunkte aus, jedoch können alle unten aufgeführten Werte bei Bedarf leicht im Skript ergänzt werden.
+
+### Aktuell implementierte Datenpunkte:
+* **Batterieladestand (SOC)** (`2013021`) - Einheit: `%`
+* **Restreichweite** (`2011501`) - Einheit: `km`
+* **Kilometerstand (Odometer)** (`2103010`) - Einheit: `km`
+* **Ladekabel angeschlossen** (`2042082`) - Einheit: Binär (`0`/`1`)
+* **Ladevorgang aktiv** (`2041142`) - Einheit: Binär (`0`/`1`)
+
+### Weitere verfügbare Datenpunkte (nicht standardmäßig im JSON, aber möglich):
+Falls du weitere Sensoren benötigst, können diese durch einfache Anpassung des Python-Skripts und deiner Home Assistant Konfiguration hinzugefügt werden:
+
+| API-Code | Beschreibung | Einheit / Wertebereich |
+| :--- | :--- | :--- |
+| **2013022** | Verbleibende Ladedauer | Minuten |
+| **2041301** | Batteriezustand (SOCE) | `%` |
+| **2101001** | Reifendruck vorne links | `kPa` (z. B. `284` kPa = 2.84 bar) |
+| **2101002** | Reifendruck vorne rechts | `kPa` |
+| **2101003** | Reifendruck hinten links | `kPa` |
+| **2101004** | Reifendruck hinten rechts | `kPa` |
+| **2101005** | Reifentemperatur vorne links | `°C` |
+| **2101006** | Reifentemperatur vorne rechts | `°C` |
+| **2101007** | Reifentemperatur hinten links | `°C` |
+| **2101008** | Reifentemperatur hinten rechts | `°C` |
+| **2210001** | Fenster vorne links geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210002** | Fenster vorne rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210003** | Fenster hinten links geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210004** | Fenster hinten rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210010** | Tür vorne links geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210011** | Tür vorne rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210012** | Tür hinten links geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2210013** | Tür hinten rechts geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2222001** | Kofferraum geöffnet? | `0` = Geschlossen / `1` = Offen |
+| **2310001** | Motorhaube geöffnet? | `0` = Offen / `1` = Geschlossen |
+| **2208001** | Türschloss (Zentralverriegelung) | `0` = Entriegelt / `1` = Verriegelt |
+| **2201001** | Innenraumtemperatur | `°C` (Wert kommt als Zehntelgrad, z. B. `230` für `23.0` °C) |
+| **2202001** | Klimaanlage aktiv (Vorklimatisierung) | `0` = Aus / `1` = An |
+
+---
+
 ## Funktionsweise der SSL-Absenkung (Technischer Hintergrund)
 Das GWM-Gateway nutzt ein mTLS-Client-Zertifikat, das von einer CA mit einer veralteten MD5- oder SHA1-Signatur ausgestellt wurde. Neuere OpenSSL-Versionen (wie sie z. B. in Alpine Linux v3.23.3 standardmäßig eingesetzt werden) blockieren solche Verbindungen streng mit der Meldung `[SSL: CA_MD_TOO_WEAK]`.
 
